@@ -1,31 +1,53 @@
 package org.hyperskill.projects.blockchain;
-import java.util.Scanner;
+
+import org.hyperskill.projects.blockchain.mining.Block;
+import org.hyperskill.projects.blockchain.mining.Blockchain;
+import org.hyperskill.projects.blockchain.mining.Miner;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 
 public class Main {
 
     private static final int BLOCKCHAIN_SIZE = 5;
-    public static void main(String[] args) {
-        int numberOfHashZeros = Main.getIntFromCLI(
-                "Enter how many zeros the hash must start with:");
-        Block.setNumberofPrefixedHashZeros(numberOfHashZeros);
+    private static final int NUMBER_OF_MINERS = 5;
 
-        Main.createBlocks(BLOCKCHAIN_SIZE);
+    private static final List<Miner> miners = new ArrayList<>();
+
+    public static void main(String[] args) {
+
+        Blockchain blockchain = Blockchain.getInstance();
+        Main.startMining(blockchain);
     }
 
-    private static void createBlocks(int n) {
-        Block block = new Block("0");
-        System.out.println(block);
-        for (int i = 1; i < n; i++) {
-            System.out.println();
-            block = new Block(block.getHash());
-            System.out.println(block);
+    private static void startMining(Blockchain blockchain) {
+        while (blockchain.getChainSize() < BLOCKCHAIN_SIZE) {
+            Main.addMinersToPool(NUMBER_OF_MINERS, blockchain);
+            Main.mineOneBlock(blockchain, miners);
+            System.out.println(blockchain.getLastBlock());
         }
     }
 
-    private static int getIntFromCLI(String prompt) {
-        System.out.println(prompt);
-        try (Scanner scanner = new Scanner(System.in)) {
-            return scanner.nextInt();
+    private static void addMinersToPool(int numberOfMiners, Blockchain blockchain) {
+        for (int i = 0; i < numberOfMiners; i++)
+            miners.add(new Miner(blockchain, i));
+    }
+
+    private static void mineOneBlock(Blockchain blockchain, List<Miner> miners) {
+        ExecutorService threadPool = Executors.newFixedThreadPool(miners.size());
+
+        // Shut down all miners once one of them finds a valid block
+        try {
+            Block resultingBlock = threadPool.invokeAny(miners);
+            blockchain.addBlock(resultingBlock);
+            threadPool.shutdownNow();
+            miners.clear();
+        } catch (ExecutionException | InterruptedException e) {
+            e.printStackTrace();
         }
     }
 }
